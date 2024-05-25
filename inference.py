@@ -172,7 +172,35 @@ class InferenceModule:
         Return the probability P(noisyDistance | pacmanPosition, ghostPosition).
         """
         "*** YOUR CODE HERE ***"
-        raiseNotDefined()
+        # Si no hay distancia ruidosa registrada:
+        if noisyDistance == None:
+            # Si la posición del fantasma coincide con la posición de la cárcel:
+            if ghostPosition == jailPosition:
+                # Devuelve 1 (probabilidad alta de observar al fantasma en la cárcel).
+                return 1
+            else:
+                # De lo contrario, devuelve 0 (probabilidad baja de observar al fantasma en cualquier otro lugar).
+                return 0
+
+        # Si la posición del fantasma coincide con la posición de la cárcel:
+        if ghostPosition == jailPosition:
+            # Si no hay distancia ruidosa registrada:
+            if noisyDistance == None:
+                # Devuelve 1 (probabilidad alta de observar al fantasma en la cárcel).
+                return 1
+            else:
+                # De lo contrario, devuelve 0 (probabilidad baja de observar al fantasma en cualquier otro lugar).
+                return 0
+
+        # Calcula la distancia real entre la posición de Pacman y la posición del fantasma.
+        trueDistance = manhattanDistance(pacmanPosition, ghostPosition)
+
+        # Calcula la probabilidad de observación basada en la distancia ruidosa y la distancia real.
+        observationProb = busters.getObservationProbability(noisyDistance, trueDistance)
+
+        # Retorna la probabilidad de observación calculada.
+        return observationProb
+
 
     def setGhostPosition(self, gameState, ghostPosition, index):
         """
@@ -331,7 +359,16 @@ class ParticleFilter(InferenceModule):
         """
         self.particles = []
         "*** YOUR CODE HERE ***"
-        raiseNotDefined()
+        # Calcula el número de posiciones legales disponibles en el juego.
+        numLegalPositions = len(self.legalPositions)
+
+        # Itera sobre el número de partículas (representaciones de posibles ubicaciones de los fantasmas).
+        for i in range(self.numParticles):
+            # Calcula el índice de la partícula en función del número de posiciones legales disponibles.
+            particleIndex = i % numLegalPositions
+            # Añade una nueva partícula (posición legal) a la lista de partículas.
+            self.particles.append(self.legalPositions[particleIndex])
+
 
     def observeUpdate(self, observation, gameState):
         """
@@ -346,7 +383,40 @@ class ParticleFilter(InferenceModule):
         the DiscreteDistribution may be useful.
         """
         "*** YOUR CODE HERE ***"
-        raiseNotDefined()
+        # Obtiene la posición actual de Pacman en el juego.
+        pacmanPosition = gameState.getPacmanPosition()
+
+        # Obtiene la posición de la cárcel en el juego.
+        jailPosition = self.getJailPosition()
+
+        # Inicializa una distribución de peso discreta para las partículas.
+        weightDistribution = DiscreteDistribution()
+
+        # Itera sobre cada partícula en la lista de partículas.
+        for particle in self.particles:
+            # Si la partícula no está en la distribución de peso, la agrega con peso 0.
+            if particle not in weightDistribution:
+                weightDistribution[particle] = 0
+            # Calcula el peso de la partícula basado en la observación actual.
+            weightDistribution[particle] += self.getObservationProb(observation, pacmanPosition, particle, jailPosition)
+
+        # Normaliza la distribución de pesos para que la suma de los pesos sea 1.
+        weightDistribution.normalize()
+
+        # Si la suma total de pesos es 0, indica que la distribución de pesos no es válida y se reinicializa uniformemente.
+        if weightDistribution.total() == 0:
+            self.initializeUniformly(gameState)
+        else:
+            # Si la distribución de pesos es válida, se generan nuevas partículas utilizando muestreo ponderado.
+            newParticles = []
+            for i in range(len(self.particles)):
+                # Selecciona una muestra de la distribución de pesos.
+                sample = weightDistribution.sample()
+                # Agrega la muestra a la lista de nuevas partículas.
+                newParticles.append(sample)
+            # Actualiza la lista de partículas con las nuevas partículas generadas.
+            self.particles = newParticles
+
 
     def elapseTime(self, gameState):
         """
@@ -354,7 +424,21 @@ class ParticleFilter(InferenceModule):
         gameState.
         """
         "*** YOUR CODE HERE ***"
-        raiseNotDefined()
+        # Inicializa una lista vacía para almacenar las nuevas partículas.
+        newParticles = []
+
+        # Itera sobre cada partícula en la lista de partículas existente.
+        for particle in self.particles:
+            # Obtiene la distribución de posición para la partícula actual en función del estado del juego.
+            newPosDist = self.getPositionDistribution(gameState, particle)
+            # Realiza un muestreo de la distribución de posición para obtener una nueva posición.
+            sample = newPosDist.sample()
+            # Agrega la nueva posición a la lista de nuevas partículas.
+            newParticles.append(sample)
+
+        # Actualiza la lista de partículas con las nuevas partículas generadas.
+        self.particles = newParticles
+
 
     def getBeliefDistribution(self):
         """
@@ -365,7 +449,20 @@ class ParticleFilter(InferenceModule):
         This function should return a normalized distribution.
         """
         "*** YOUR CODE HERE ***"
-        raiseNotDefined()
+        # Inicializa una distribución discreta para contar la frecuencia de cada partícula.
+        dist = DiscreteDistribution()
+
+        # Itera sobre cada partícula en la lista de partículas.
+        for particle in self.particles:
+            # Incrementa el conteo de la frecuencia de la partícula en la distribución.
+            dist[particle] += 1
+
+        # Normaliza la distribución para que la suma de las probabilidades sea 1.
+        dist.normalize()
+
+        # Retorna la distribución de frecuencia normalizada.
+        return dist
+
 
 
 class JointParticleFilter(ParticleFilter):
@@ -393,7 +490,27 @@ class JointParticleFilter(ParticleFilter):
         """
         self.particles = []
         "*** YOUR CODE HERE ***"
-        raiseNotDefined()
+        # Inicializa una lista para almacenar las posiciones de los fantasmas.
+        ghostPosLists = []
+
+        # Para cada fantasma en el juego, añade la lista de posiciones legales a ghostPosLists.
+        for i in range(self.numGhosts):
+            ghostPosLists.append(self.legalPositions)
+
+        # Calcula el producto cartesiano de todas las posiciones posibles para los fantasmas.
+        cartesianProduct = itertools.product(*ghostPosLists)
+
+        # Convierte el objeto iterador en una lista y luego mezcla aleatoriamente el orden de las combinaciones.
+        cartesianProduct = list(cartesianProduct)
+        random.shuffle(cartesianProduct)
+
+        # Itera sobre el número de partículas deseado.
+        for i in range(self.numParticles):
+            # Calcula el índice de la lista a partir del índice actual y la longitud de cartesianProduct.
+            listsIndex = i % len(cartesianProduct)
+            # Añade una combinación de posiciones de fantasmas a la lista de partículas.
+            self.particles.append(cartesianProduct[listsIndex])
+
 
     def addGhostAgent(self, agent):
         """
@@ -426,9 +543,43 @@ class JointParticleFilter(ParticleFilter):
         the DiscreteDistribution may be useful.
         """
         "*** YOUR CODE HERE ***"
-        raiseNotDefined()
-        
+        # Obtiene la posición actual de Pacman en el juego.
+        pacmanPosition = gameState.getPacmanPosition()
 
+        # Inicializa una distribución de peso discreta para las partículas.
+        weightDistribution = DiscreteDistribution()
+
+        # Itera sobre cada partícula en la lista de partículas.
+        for particle in self.particles:
+            # Si la partícula no está en la distribución de peso, la agrega con peso 0.
+            if particle not in weightDistribution:
+                weightDistribution[particle] = 0
+            
+            # Inicializa un producto que almacenará la probabilidad de observación conjunta para cada fantasma.
+            product = 1
+            # Calcula la probabilidad de observación conjunta para cada fantasma en la partícula.
+            for i in range(self.numGhosts):
+                product *= self.getObservationProb(observation[i], pacmanPosition, particle[i], self.getJailPosition(i))
+            
+            # Añade el producto al peso correspondiente de la partícula en la distribución de pesos.
+            weightDistribution[particle] += product
+
+        # Normaliza la distribución de pesos para que la suma de los pesos sea 1.
+        weightDistribution.normalize()
+
+        # Si la suma total de pesos es 0, indica que la distribución de pesos no es válida y se reinicializa uniformemente.
+        if weightDistribution.total() == 0:
+            self.initializeUniformly(gameState)
+        else:
+            # Si la distribución de pesos es válida, se generan nuevas partículas utilizando muestreo ponderado.
+            newParticles = []
+            for i in range(len(self.particles)):
+                # Selecciona una muestra de la distribución de pesos.
+                sample = weightDistribution.sample()
+                # Agrega la muestra a la lista de nuevas partículas.
+                newParticles.append(sample)
+            # Actualiza la lista de partículas con las nuevas partículas generadas.
+            self.particles = newParticles
 
     def elapseTime(self, gameState):
         """
@@ -441,7 +592,16 @@ class JointParticleFilter(ParticleFilter):
 
             # now loop through and update each entry in newParticle...
             "*** YOUR CODE HERE ***"
-            raiseNotDefined()
+            # Itera sobre cada fantasma en el juego.
+            for i in range(self.numGhosts):
+                # Obtiene la distribución de probabilidad de la nueva posición del fantasma i,
+                # dada la información actual del juego y la posición anterior del fantasma en la partícula.
+                newPosDist = self.getPositionDistribution(gameState, oldParticle, i, self.ghostAgents[i])
+                # Realiza un muestreo de la distribución de probabilidad para obtener una nueva posición para el fantasma i.
+                sample = newPosDist.sample()
+                # Almacena la nueva posición del fantasma i en la nueva partícula.
+                newParticle[i] = sample
+
             """*** END YOUR CODE HERE ***"""
             newParticles.append(tuple(newParticle))
         self.particles = newParticles
