@@ -137,13 +137,48 @@ class GreedyBustersAgent(BustersAgent):
         not yet been captured, then chooses an action that brings
         Pacman closest to the closest ghost (according to mazeDistance!).
         """
+        # Obtiene la posición actual de Pacman en el juego.
         pacmanPosition = gameState.getPacmanPosition()
+
+        # Obtiene las acciones legales disponibles para Pacman.
         legal = [a for a in gameState.getLegalPacmanActions()]
+
+        # Obtiene una lista de fantasmas vivos en el juego.
         livingGhosts = gameState.getLivingGhosts()
+
+        # Obtiene las distribuciones de posición de fantasmas vivos.
         livingGhostPositionDistributions = \
             [beliefs for i, beliefs in enumerate(self.ghostBeliefs)
-             if livingGhosts[i+1]]
+            if livingGhosts[i+1]]
         "*** YOUR CODE HERE ***"
+        # Obtiene el índice del fantasma más cercano a Pacman.
+        closestGhost = livingGhostPositionDistributions[0].argMax()
 
-        
-        return util.raiseNotDefined()
+        # Calcula la distancia entre Pacman y el fantasma más cercano.
+        closestGhostDist = self.distancer.getDistance(pacmanPosition, closestGhost)
+
+        # Encuentra el fantasma más cercano a Pacman entre todos los fantasmas vivos.
+        for distribution in livingGhostPositionDistributions[1:]:
+            ghostPos = distribution.argMax()
+            ghostDist = self.distancer.getDistance(pacmanPosition, ghostPos)
+            # Actualiza el fantasma más cercano si se encuentra uno más cercano.
+            if ghostDist < closestGhostDist:
+                closestGhost = ghostPos
+                closestGhostDist = ghostDist
+
+        # Inicializa la mejor acción con la primera acción legal disponible.
+        bestAction = legal[0]
+
+        # Calcula la distancia más corta entre la próxima posición de Pacman y el fantasma más cercano.
+        shortestNewDist = self.distancer.getDistance(Actions.getSuccessor(pacmanPosition, bestAction), closestGhost)
+
+        # Encuentra la mejor acción considerando la distancia más corta a un fantasma.
+        for action in legal[1:]:
+            newDist = self.distancer.getDistance(Actions.getSuccessor(pacmanPosition, action), closestGhost)
+            # Actualiza la mejor acción si encuentra una con una distancia más corta.
+            if newDist < shortestNewDist:
+                bestAction = action
+                shortestNewDist = newDist
+
+        # Retorna la mejor acción para Pacman.
+        return bestAction
